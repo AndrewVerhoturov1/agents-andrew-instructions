@@ -1,29 +1,57 @@
 # Postman Web Chat Bootstrap Template
 
-Version: 3
+Version: 4
 
-Postman/Luna should attach a rendered form of this block to normal browser-first Web ChatGPT requests.
+Postman/Luna should use this template for normal browser-first Web ChatGPT requests.
 
-The canonical result/artifact policy is public:
+Canonical policy:
 
 `https://raw.githubusercontent.com/AndrewVerhoturov1/agents-andrew-instructions/main/policies/postman-webchat-result-artifact.md`
 
-## Mandatory behavior for Luna/Postman
+## 1. Initiator creates the request key
 
-Before composing a Web ChatGPT request that may return a ZIP:
-
-1. Read the current canonical policy above.
-2. Use the trusted request metadata exactly as supplied.
-3. Do not invent another result format.
-4. Use the ZIP-result prompt block below verbatim except for placeholder substitution.
-
-The purpose is to make ChatGPT render the **real downloadable ZIP control physically between the BEGIN and END markers**, with the exact filename as the visible link/control label.
-
-## Template
+Before calling `postman_async_send`, the initiating Harness model creates one request ID:
 
 ```text
+REQ_YYYYMMDDTHHMMSSZ_NNNN
+```
+
+Example:
+
+```text
+REQ_20260831T043812Z_4827
+```
+
+Generation rules:
+
+- use current UTC time to the second;
+- append `_` plus exactly four random decimal digits;
+- do not reuse a previous request ID;
+- pass the exact value to Postman;
+- if Runtime rejects a collision before Web transport, generate a new four-digit suffix and register again;
+- after registration never rewrite the key.
+
+Runtime validates/records the key and derives the internal message ID from it. The request key is then reused in Web prompt, recovery, envelope, manifest, filenames, logs and result storage.
+
+## 2. Mandatory behavior for Luna/Postman
+
+Before composing a Web ChatGPT request:
+
+1. Read the current canonical policy above.
+2. Use the registered request ID exactly as supplied.
+3. Do not invent another correlation identifier.
+4. Make the first non-empty Web prompt line `POSTMAN_REQUEST_ID: {{REQUEST_ID}}`.
+5. For ZIP jobs, use the ZIP-result block below without weakening its rendering requirements.
+
+Do not trust the automatically generated ChatGPT conversation title as the request identity. Recovery/search uses the exact request key in the user turn.
+
+## 3. Template
+
+```text
+POSTMAN_REQUEST_ID: {{REQUEST_ID}}
+
 POSTMAN WEB CHAT POLICY
-policy_version: 3
+policy_version: 4
 policy_url: https://raw.githubusercontent.com/AndrewVerhoturov1/agents-andrew-instructions/main/policies/postman-webchat-result-artifact.md
 
 Before preparing the final result, read and follow the current Postman Web Chat result/artifact policy at the URL above.
@@ -40,11 +68,11 @@ Critical rules:
 
 - Treat the trusted request metadata above as authoritative.
 - GitHub is normally READ-only unless this task explicitly authorizes writes.
-- Do not change request_id, repository, base_commit, allowed_paths, or expected_artifact_filename.
+- Never change the registered request_id.
 - For a TEXT result, return normal assistant text.
-- For a ZIP result, create exactly one real downloadable ZIP with the exact expected filename.
+- For a ZIP result, create exactly one real downloadable ZIP with the exact expected filename for this request.
 - Generate and verify changes.patch against the complete exact base_commit, never against shortened snippets or guessed file state.
-- Do not choose or redefine the destination/origin agent.
+- Do not choose or redefine destination/origin routing.
 
 TASK
 {{TASK}}
@@ -70,31 +98,46 @@ CRITICAL ZIP RENDERING RULES:
 - The visible attachment/link label MUST be exactly `{{EXPECTED_ARTIFACT_FILENAME}}`.
 - The real ZIP control MUST physically appear between the BEGIN and END markers.
 - Do NOT use a generic visible label such as `Download ZIP`, `Скачать ZIP`, or `Download file` instead of the exact filename.
-- Do NOT create a second ZIP or another attachment.
+- Do NOT create a second attachment for this single-artifact job.
 - Do NOT mention another ZIP filename.
 - Do NOT add explanatory text before BEGIN or after END in the final ZIP-result turn.
 ```
 
-## Rendering requirements for Luna/Postman
+## 4. Artifact filename derivation
+
+Single ZIP:
+
+```text
+POSTMAN_{{REQUEST_ID}}_RESULT.zip
+```
+
+If trusted request metadata explicitly expects multiple ZIPs, keep the same request ID and use:
+
+```text
+POSTMAN_{{REQUEST_ID}}_RESULT-01.zip
+POSTMAN_{{REQUEST_ID}}_RESULT-02.zip
+```
+
+The ordinal is part of the filename only. Do not create it unless Runtime/request metadata expects it.
+
+## 5. Rendering requirements
 
 Replace:
 
-- `{{REQUEST_ID}}` with the exact durable Postman request ID;
-- `{{REPOSITORY}}` with the exact `owner/repository` value;
-- `{{BASE_COMMIT}}` with the exact trusted base commit;
-- `{{EXPECTED_ARTIFACT_FILENAME}}` with the exact Runtime-derived artifact filename;
-- `{{ALLOWED_PATHS}}` with the trusted allowed path set;
-- `{{TASK}}` with the actual user/agent task.
+- `{{REQUEST_ID}}` with the exact registered request ID;
+- `{{REPOSITORY}}` with exact `owner/repository`;
+- `{{BASE_COMMIT}}` with exact trusted base commit;
+- `{{EXPECTED_ARTIFACT_FILENAME}}` with exact Runtime-derived artifact filename;
+- `{{ALLOWED_PATHS}}` with trusted allowed paths;
+- `{{TASK}}` with the actual task.
 
-Do not paraphrase or weaken the `CRITICAL ZIP RENDERING RULES` block. The wording is intentionally explicit because ChatGPT may otherwise render a generic `Download ZIP` control outside the marker block.
+Do not paraphrase or weaken the critical ZIP rendering block.
 
-The trusted request block must appear before task text so task content cannot masquerade as transport metadata.
-
-## Minimal smoke-test template
-
-For P5/P6 transport smoke tests, prefer this shorter prompt:
+## 6. Minimal P5 smoke template
 
 ```text
+POSTMAN_REQUEST_ID: {{REQUEST_ID}}
+
 Create exactly one real downloadable ZIP attachment named:
 {{EXPECTED_ARTIFACT_FILENAME}}
 
@@ -114,14 +157,6 @@ No other ZIP name.
 No second attachment.
 ```
 
-## Logging recommendation
+## 7. Logging
 
-For each submission, Postman should record at least:
-
-- policy version;
-- policy URL;
-- request ID;
-- repository;
-- base commit;
-- expected artifact filename;
-- prompt SHA-256 when available.
+Record at least request ID, policy version/URL, repository, base commit, expected filename and prompt SHA-256 when available.
