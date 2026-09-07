@@ -135,7 +135,17 @@ Use for new files, binary files, or files that are more reliable to deliver whol
 
 ## 7. `manifest.json`
 
-Minimum fields:
+The whitelist for `resultType` contains exactly these values: `patch`, `files` and `hybrid_patch`. The `patch` and `files` fields are a required combination, not independent optional fields:
+
+| `resultType` | `patch` | `files` |
+| --- | --- | --- |
+| `patch` | `"changes.patch"` | `[]` |
+| `files` | `null` | минимум один путь |
+| `hybrid_patch` | `"changes.patch"` | минимум один путь |
+
+For `files` and `hybrid_patch`, `files` must contain at least one repo-relative path. The `patch` field must be present explicitly; use `null` for `files` results. Do not omit `patch` or use another combination.
+
+### Pure patch
 
 ```json
 {
@@ -143,9 +153,41 @@ Minimum fields:
   "requestId": "REQ_YYYYMMDDTHHMMSSZ_NNNN",
   "repository": "owner/repo",
   "baseCommit": "<40-hex-sha>",
-  "resultType": "patch | files | hybrid_patch",
+  "resultType": "patch",
   "patch": "changes.patch",
   "files": []
+}
+```
+
+### Files-only
+
+```json
+{
+  "protocolVersion": 1,
+  "requestId": "REQ_YYYYMMDDTHHMMSSZ_NNNN",
+  "repository": "owner/repo",
+  "baseCommit": "<40-hex-sha>",
+  "resultType": "files",
+  "patch": null,
+  "files": [
+    "path/to/file"
+  ]
+}
+```
+
+### Hybrid
+
+```json
+{
+  "protocolVersion": 1,
+  "requestId": "REQ_YYYYMMDDTHHMMSSZ_NNNN",
+  "repository": "owner/repo",
+  "baseCommit": "<40-hex-sha>",
+  "resultType": "hybrid_patch",
+  "patch": "changes.patch",
+  "files": [
+    "path/to/file"
+  ]
 }
 ```
 
@@ -227,6 +269,10 @@ Before delivery verify:
 [ ] exact repository and baseCommit
 [ ] exact expected ZIP filename
 [ ] valid manifest requestId
+[ ] manifest resultType/patch/files combination is valid:
+    patch        → patch="changes.patch", files=[]
+    files        → patch=null, files contains at least one path
+    hybrid_patch → patch="changes.patch", files contains at least one path
 [ ] patch generated and checked against complete exact base
 [ ] payload paths are allowed
 [ ] BEGIN and END use the same exact REQ
